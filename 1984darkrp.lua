@@ -2,13 +2,18 @@
 pcall(function()
     if _G.PrinterESPConn then _G.PrinterESPConn:Disconnect() end
     if _G.PrinterClickConn then _G.PrinterClickConn:Disconnect() end
-    if _G.GenBox then _G.GenBox:Remove() end
-    if _G.GenText then _G.GenText:Remove() end
-    if _G.QualBox then _G.QualBox:Remove() end
-    if _G.QualText then _G.QualText:Remove() end
+    if _G.ActiveESPDrawings then
+        for _, obj in pairs(_G.ActiveESPDrawings) do
+            pcall(function() obj:Remove() end)
+        end
+    end
     if _G.MainBorder then _G.MainBorder:Remove() end
     if _G.MainBg then _G.MainBg:Remove() end
+    if _G.AccentBar then _G.AccentBar:Remove() end
     if _G.TitleText then _G.TitleText:Remove() end
+    if _G.CloseBtnText then _G.CloseBtnText:Remove() end
+    if _G.GenBoxBg then _G.GenBoxBg:Remove() end
+    if _G.GenHeader then _G.GenHeader:Remove() end
     if _G.GenBtnBg then _G.GenBtnBg:Remove() end
     if _G.GenBtnText then _G.GenBtnText:Remove() end
     if _G.GenBoxBtnBg then _G.GenBoxBtnBg:Remove() end
@@ -17,7 +22,9 @@ pcall(function()
     if _G.GenSliderFill then _G.GenSliderFill:Remove() end
     if _G.GenSliderKnob then _G.GenSliderKnob:Remove() end
     if _G.GenSliderText then _G.GenSliderText:Remove() end
-    if _G.QualHeaderText then _G.QualHeaderText:Remove() end
+    if _G.GenStatusText then _G.GenStatusText:Remove() end
+    if _G.QualBoxBg then _G.QualBoxBg:Remove() end
+    if _G.QualHeader then _G.QualHeader:Remove() end
     if _G.QualBtnBg then _G.QualBtnBg:Remove() end
     if _G.QualBtnText then _G.QualBtnText:Remove() end
     if _G.QualBoxBtnBg then _G.QualBoxBtnBg:Remove() end
@@ -26,14 +33,28 @@ pcall(function()
     if _G.QualSliderFill then _G.QualSliderFill:Remove() end
     if _G.QualSliderKnob then _G.QualSliderKnob:Remove() end
     if _G.QualSliderText then _G.QualSliderText:Remove() end
+    if _G.QualStatusText then _G.QualStatusText:Remove() end
+    if _G.ResizeHandle then _G.ResizeHandle:Remove() end
+    if _G.ConfBorder then _G.ConfBorder:Remove() end
+    if _G.ConfBg then _G.ConfBg:Remove() end
+    if _G.ConfTitle then _G.ConfTitle:Remove() end
+    if _G.ConfMsg then _G.ConfMsg:Remove() end
+    if _G.ConfYesBg then _G.ConfYesBg:Remove() end
+    if _G.ConfYesText then _G.ConfYesText:Remove() end
+    if _G.ConfNoBg then _G.ConfNoBg:Remove() end
+    if _G.ConfNoText then _G.ConfNoText:Remove() end
 end)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local localPlayer = Players.LocalPlayer
 local mouse = localPlayer:GetMouse()
 
 -- Settings state
+local uiVisible = true
+local confirmingClose = false
+
 local genEnabled = true
 local genBoxEnabled = true
 local genMaxDist = 500
@@ -42,47 +63,36 @@ local qualEnabled = true
 local qualBoxEnabled = true
 local qualMaxDist = 500
 
--- ESP Drawings for Generic
-local genBox = Drawing.new("Square")
-genBox.Visible = false
-genBox.Color = Color3.fromRGB(0, 170, 255)
-genBox.Thickness = 2
-genBox.Filled = false
-_G.GenBox = genBox
+-- Multi-ESP Pool Storage
+_G.ActiveESPDrawings = {}
+local function createESPPair(color)
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Color = color
+    box.Thickness = 2
+    box.Filled = false
+    table.insert(_G.ActiveESPDrawings, box)
 
-local genText = Drawing.new("Text")
-genText.Visible = false
-genText.Color = Color3.fromRGB(0, 170, 255)
-genText.Size = 16
-genText.Center = true
-genText.Outline = true
-_G.GenText = genText
+    local txt = Drawing.new("Text")
+    txt.Visible = false
+    txt.Color = color
+    txt.Size = 16
+    txt.Center = true
+    txt.Outline = true
+    table.insert(_G.ActiveESPDrawings, txt)
 
--- ESP Drawings for Quality
-local qualBox = Drawing.new("Square")
-qualBox.Visible = false
-qualBox.Color = Color3.fromRGB(255, 50, 50)
-qualBox.Thickness = 2
-qualBox.Filled = false
-_G.QualBox = qualBox
+    return box, txt
+end
 
-local qualText = Drawing.new("Text")
-qualText.Visible = false
-qualText.Color = Color3.fromRGB(255, 50, 50)
-qualText.Size = 16
-qualText.Center = true
-qualText.Outline = true
-_G.QualText = qualText
-
--- UI Window Geometry (Position: X: 30, Y: 100, Width: 200, Height: 265)
-local winX, winY, winW, winH = 30, 100, 200, 265
+-- UI Window Geometry (Position: X: 30, Y: 100, Width: 235, Height: 355)
+local winX, winY, winW, winH = 30, 100, 235, 355
 
 -- Window Border
 local mainBorder = Drawing.new("Square")
 mainBorder.Visible = true
 mainBorder.Position = Vector2.new(winX - 1, winY - 1)
 mainBorder.Size = Vector2.new(winW + 2, winH + 2)
-mainBorder.Color = Color3.fromRGB(40, 40, 50)
+mainBorder.Color = Color3.fromRGB(45, 45, 55)
 mainBorder.Filled = true
 _G.MainBorder = mainBorder
 
@@ -91,28 +101,119 @@ local mainBg = Drawing.new("Square")
 mainBg.Visible = true
 mainBg.Position = Vector2.new(winX, winY)
 mainBg.Size = Vector2.new(winW, winH)
-mainBg.Color = Color3.fromRGB(20, 20, 25)
+mainBg.Color = Color3.fromRGB(15, 15, 20)
 mainBg.Filled = true
 _G.MainBg = mainBg
 
--- Title Text
+-- Top Accent Line
+local accentBar = Drawing.new("Square")
+accentBar.Visible = true
+accentBar.Position = Vector2.new(winX, winY)
+accentBar.Size = Vector2.new(winW, 3)
+accentBar.Color = Color3.fromRGB(0, 170, 255)
+accentBar.Filled = true
+_G.AccentBar = accentBar
+
+-- Title Text (Increased Size)
 local titleText = Drawing.new("Text")
 titleText.Visible = true
-titleText.Position = Vector2.new(winX + 10, winY + 8)
-titleText.Size = 14
-titleText.Color = Color3.fromRGB(200, 200, 210)
+titleText.Position = Vector2.new(winX + 12, winY + 8)
+titleText.Size = 16
+titleText.Color = Color3.fromRGB(230, 230, 240)
 titleText.Outline = true
 titleText.Text = "1984 Printer ESP"
 _G.TitleText = titleText
 
+-- Close [X] Button in Title Bar (Increased Size)
+local closeBtnText = Drawing.new("Text")
+closeBtnText.Visible = true
+closeBtnText.Size = 16
+closeBtnText.Color = Color3.fromRGB(255, 80, 80)
+closeBtnText.Outline = true
+closeBtnText.Text = "[X]"
+_G.CloseBtnText = closeBtnText
+
+-- Resize Handle Indicator (Bottom Right)
+local resizeHandle = Drawing.new("Text")
+resizeHandle.Visible = true
+resizeHandle.Size = 13
+resizeHandle.Color = Color3.fromRGB(100, 100, 120)
+resizeHandle.Outline = true
+resizeHandle.Text = "◢"
+_G.ResizeHandle = resizeHandle
+
+-- ==================== CONFIRMATION MODAL DRAWINGS ====================
+local confBorder = Drawing.new("Square")
+confBorder.Visible = false
+confBorder.Color = Color3.fromRGB(70, 70, 85)
+confBorder.Filled = true
+_G.ConfBorder = confBorder
+
+local confBg = Drawing.new("Square")
+confBg.Visible = false
+confBg.Color = Color3.fromRGB(18, 18, 25)
+confBg.Filled = true
+_G.ConfBg = confBg
+
+local confTitle = Drawing.new("Text")
+confTitle.Visible = false
+confTitle.Size = 15
+confTitle.Color = Color3.fromRGB(255, 100, 100)
+confTitle.Outline = true
+confTitle.Text = "Close Script?"
+_G.ConfTitle = confTitle
+
+local confMsg = Drawing.new("Text")
+confMsg.Visible = false
+confMsg.Size = 14
+confMsg.Color = Color3.fromRGB(220, 220, 230)
+confMsg.Outline = true
+confMsg.Text = "Do you want to close the script?"
+_G.ConfMsg = confMsg
+
+local confYesBg = Drawing.new("Square")
+confYesBg.Visible = false
+confYesBg.Color = Color3.fromRGB(40, 130, 60)
+confYesBg.Filled = true
+_G.ConfYesBg = confYesBg
+
+local confYesText = Drawing.new("Text")
+confYesText.Visible = false
+confYesText.Size = 14
+confYesText.Center = true
+confYesText.Outline = true
+confYesText.Color = Color3.fromRGB(255, 255, 255)
+confYesText.Text = "Yes"
+_G.ConfYesText = confYesText
+
+local confNoBg = Drawing.new("Square")
+confNoBg.Visible = false
+confNoBg.Color = Color3.fromRGB(150, 45, 45)
+confNoBg.Filled = true
+_G.ConfNoBg = confNoBg
+
+local confNoText = Drawing.new("Text")
+confNoText.Visible = false
+confNoText.Size = 14
+confNoText.Center = true
+confNoText.Outline = true
+confNoText.Color = Color3.fromRGB(255, 255, 255)
+confNoText.Text = "No"
+_G.ConfNoText = confNoText
+
 -- ==================== SECTION 1: GENERIC PRINTERS ====================
+local genBoxBg = Drawing.new("Square")
+genBoxBg.Visible = true
+genBoxBg.Color = Color3.fromRGB(22, 22, 30)
+genBoxBg.Filled = true
+_G.GenBoxBg = genBoxBg
+
 local genHeader = Drawing.new("Text")
 genHeader.Visible = true
-genHeader.Position = Vector2.new(winX + 10, winY + 30)
-genHeader.Size = 12
+genHeader.Size = 14
 genHeader.Color = Color3.fromRGB(0, 170, 255)
 genHeader.Outline = true
-genHeader.Text = "-- [ Generic Printers ] --"
+genHeader.Text = "Generic Printers"
 _G.GenHeader = genHeader
 
 local genBtnBg = Drawing.new("Square")
@@ -123,15 +224,22 @@ local genSliderBg = Drawing.new("Square")
 local genSliderFill = Drawing.new("Square")
 local genSliderKnob = Drawing.new("Square")
 local genSliderText = Drawing.new("Text")
+local genStatusText = Drawing.new("Text")
 
 -- ==================== SECTION 2: QUALITY PRINTERS ====================
+local qualBoxBg = Drawing.new("Square")
+qualBoxBg.Visible = true
+qualBoxBg.Color = Color3.fromRGB(22, 22, 30)
+qualBoxBg.Filled = true
+_G.QualBoxBg = qualBoxBg
+
 local qualHeader = Drawing.new("Text")
 qualHeader.Visible = true
-qualHeader.Size = 12
-qualHeader.Color = Color3.fromRGB(255, 50, 50)
+qualHeader.Size = 14
+qualHeader.Color = Color3.fromRGB(255, 60, 60)
 qualHeader.Outline = true
-qualHeader.Text = "-- [ Quality Printers ] --"
-_G.QualHeaderText = qualHeader
+qualHeader.Text = "Quality Printers"
+_G.QualHeader = qualHeader
 
 local qualBtnBg = Drawing.new("Square")
 local qualBtnText = Drawing.new("Text")
@@ -141,18 +249,12 @@ local qualSliderBg = Drawing.new("Square")
 local qualSliderFill = Drawing.new("Square")
 local qualSliderKnob = Drawing.new("Square")
 local qualSliderText = Drawing.new("Text")
+local qualStatusText = Drawing.new("Text")
 
--- Set initial properties for all elements
-for _, obj in pairs({genBtnBg, genBoxBtnBg, qualBtnBg, qualBoxBtnBg}) do
-    obj.Visible = true
-    obj.Size = Vector2.new(180, 22)
-    obj.Color = Color3.fromRGB(30, 30, 38)
-    obj.Filled = true
-end
-
+-- Initial properties (Larger button text)
 for _, txt in pairs({genBtnText, genBoxBtnText, qualBtnText, qualBoxBtnText}) do
     txt.Visible = true
-    txt.Size = 12
+    txt.Size = 13
     txt.Center = true
     txt.Outline = true
     txt.Color = Color3.fromRGB(0, 255, 100)
@@ -162,89 +264,270 @@ genBoxBtnText.Text = "Box ESP: [ON]"
 qualBtnText.Text = "ESP: [ON]"
 qualBoxBtnText.Text = "Box ESP: [ON]"
 
+for _, obj in pairs({genBtnBg, genBoxBtnBg, qualBtnBg, qualBoxBtnBg}) do
+    obj.Visible = true
+    obj.Color = Color3.fromRGB(35, 35, 45)
+    obj.Filled = true
+end
+
 for _, sBg in pairs({genSliderBg, qualSliderBg}) do
     sBg.Visible = true
-    sBg.Size = Vector2.new(180, 5)
-    sBg.Color = Color3.fromRGB(40, 40, 50)
+    sBg.Size = Vector2.new(1, 5)
+    sBg.Color = Color3.fromRGB(45, 45, 55)
     sBg.Filled = true
 end
 
 for _, sFill in pairs({genSliderFill, qualSliderFill}) do
     sFill.Visible = true
-    sFill.Size = Vector2.new(180, 5)
+    sFill.Size = Vector2.new(1, 5)
     sFill.Color = Color3.fromRGB(0, 170, 255)
     sFill.Filled = true
 end
 
 for _, sKnob in pairs({genSliderKnob, qualSliderKnob}) do
     sKnob.Visible = true
-    sKnob.Size = Vector2.new(6, 13)
+    sKnob.Size = Vector2.new(7, 14)
     sKnob.Color = Color3.fromRGB(255, 255, 255)
     sKnob.Filled = true
 end
 
 for _, sTxt in pairs({genSliderText, qualSliderText}) do
     sTxt.Visible = true
-    sTxt.Size = 11
-    sTxt.Color = Color3.fromRGB(180, 180, 190)
+    sTxt.Size = 13
+    sTxt.Color = Color3.fromRGB(200, 200, 210)
     sTxt.Outline = true
 end
 
-_G.GenBtnBg = genBtnBg
-_G.GenBtnText = genBtnText
-_G.GenBoxBtnBg = genBoxBtnBg
-_G.GenBoxBtnText = genBoxBtnText
-_G.GenSliderBg = genSliderBg
-_G.GenSliderFill = genSliderFill
-_G.GenSliderKnob = genSliderKnob
-_G.GenSliderText = genSliderText
-
-_G.QualBtnBg = qualBtnBg
-_G.QualBtnText = qualBtnText
-_G.QualBoxBtnBg = qualBoxBtnBg
-_G.QualBoxBtnText = qualBoxBtnText
-_G.QualSliderBg = qualSliderBg
-_G.QualSliderFill = qualSliderFill
-_G.QualSliderKnob = qualSliderKnob
-_G.QualSliderText = qualSliderText
+for _, statTxt in pairs({genStatusText, qualStatusText}) do
+    statTxt.Visible = true
+    statTxt.Size = 13
+    statTxt.Outline = true
+    statTxt.Color = Color3.fromRGB(150, 150, 160)
+    statTxt.Text = "Status: [No Printers]"
+end
 
 -- Interaction States
 local isDraggingWindow = false
-local activeSlider = nil -- "gen" or "qual"
+local isResizingWindow = false
+local activeSlider = nil
 local windowOffset = Vector2.new(0, 0)
 local wasMousePressed = false
 local lastClick = 0
+local lastKeyToggle = 0
 
--- Handle Input, Dragging, Clicking, and Sliders
+-- Helper function to toggle main UI visibility state
+local function setMainUIVisible(visible)
+    mainBorder.Visible = visible
+    mainBg.Visible = visible
+    accentBar.Visible = visible
+    titleText.Visible = visible
+    closeBtnText.Visible = visible
+    resizeHandle.Visible = visible
+    
+    genBoxBg.Visible = visible
+    genHeader.Visible = visible
+    genBtnBg.Visible = visible
+    genBtnText.Visible = visible
+    genBoxBtnBg.Visible = visible
+    genBoxBtnText.Visible = visible
+    genSliderBg.Visible = visible
+    genSliderFill.Visible = visible
+    genSliderKnob.Visible = visible
+    genSliderText.Visible = visible
+    genStatusText.Visible = visible
+    
+    qualBoxBg.Visible = visible
+    qualHeader.Visible = visible
+    qualBtnBg.Visible = visible
+    qualBtnText.Visible = visible
+    qualBoxBtnBg.Visible = visible
+    qualBoxBtnText.Visible = visible
+    qualSliderBg.Visible = visible
+    qualSliderFill.Visible = visible
+    qualSliderKnob.Visible = visible
+    qualSliderText.Visible = visible
+    qualStatusText.Visible = visible
+
+    if not visible then
+        for _, obj in ipairs(_G.ActiveESPDrawings) do
+            obj.Visible = false
+        end
+    end
+end
+
+-- Helper function to toggle confirmation modal visibility state
+local function setConfModalVisible(visible)
+    confBorder.Visible = visible
+    confBg.Visible = visible
+    confTitle.Visible = visible
+    confMsg.Visible = visible
+    confYesBg.Visible = visible
+    confYesText.Visible = visible
+    confNoBg.Visible = visible
+    confNoText.Visible = visible
+end
+
+-- Function to completely wipe the script and close drawings
+local function fullShutdown()
+    pcall(function()
+        if _G.PrinterESPConn then _G.PrinterESPConn:Disconnect() end
+        if _G.PrinterClickConn then _G.PrinterClickConn:Disconnect() end
+        if _G.ActiveESPDrawings then
+            for _, obj in pairs(_G.ActiveESPDrawings) do
+                pcall(function() obj:Remove() end)
+            end
+        end
+        if _G.MainBorder then _G.MainBorder:Remove() end
+        if _G.MainBg then _G.MainBg:Remove() end
+        if _G.AccentBar then _G.AccentBar:Remove() end
+        if _G.TitleText then _G.TitleText:Remove() end
+        if _G.CloseBtnText then _G.CloseBtnText:Remove() end
+        if _G.GenBoxBg then _G.GenBoxBg:Remove() end
+        if _G.GenHeader then _G.GenHeader:Remove() end
+        if _G.GenBtnBg then _G.GenBtnBg:Remove() end
+        if _G.GenBtnText then _G.GenBtnText:Remove() end
+        if _G.GenBoxBtnBg then _G.GenBoxBtnBg:Remove() end
+        if _G.GenBoxBtnText then _G.GenBoxBtnText:Remove() end
+        if _G.GenSliderBg then _G.GenSliderBg:Remove() end
+        if _G.GenSliderFill then _G.GenSliderFill:Remove() end
+        if _G.GenSliderKnob then _G.GenSliderKnob:Remove() end
+        if _G.GenSliderText then _G.GenSliderText:Remove() end
+        if _G.GenStatusText then _G.GenStatusText:Remove() end
+        if _G.QualBoxBg then _G.QualBoxBg:Remove() end
+        if _G.QualHeader then _G.QualHeader:Remove() end
+        if _G.QualBtnBg then _G.QualBtnBg:Remove() end
+        if _G.QualBtnText then _G.QualBtnText:Remove() end
+        if _G.QualBoxBtnBg then _G.QualBoxBtnBg:Remove() end
+        if _G.QualBoxBtnText then _G.QualBoxBtnText:Remove() end
+        if _G.QualSliderBg then _G.QualSliderBg:Remove() end
+        if _G.QualSliderFill then _G.QualSliderFill:Remove() end
+        if _G.QualSliderKnob then _G.QualSliderKnob:Remove() end
+        if _G.QualSliderText then _G.QualSliderText:Remove() end
+        if _G.QualStatusText then _G.QualStatusText:Remove() end
+        if _G.ResizeHandle then _G.ResizeHandle:Remove() end
+        if _G.ConfBorder then _G.ConfBorder:Remove() end
+        if _G.ConfBg then _G.ConfBg:Remove() end
+        if _G.ConfTitle then _G.ConfTitle:Remove() end
+        if _G.ConfMsg then _G.ConfMsg:Remove() end
+        if _G.ConfYesBg then _G.ConfYesBg:Remove() end
+        if _G.ConfYesText then _G.ConfYesText:Remove() end
+        if _G.ConfNoBg then _G.ConfNoBg:Remove() end
+        if _G.ConfNoText then _G.ConfNoText:Remove() end
+    end)
+end
+
+-- Main UI Render, Dragging, Resizing, and Clicking Loop
 _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
+    if tick() - lastKeyToggle > 0.25 then
+        local success, isPressed = pcall(function()
+            return UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+        end)
+        if success and isPressed then
+            lastKeyToggle = tick()
+            if confirmingClose then
+                confirmingClose = false
+                setConfModalVisible(false)
+                setMainUIVisible(true)
+                uiVisible = true
+            else
+                uiVisible = not uiVisible
+                setMainUIVisible(uiVisible)
+            end
+        end
+    end
+
     local mouseX, mouseY = mouse.X, mouse.Y
     local mousePressed = ismouse1pressed()
 
-    -- Coordinate Layout Bounds relative to winX, winY
-    -- Generic Section
-    local gBtnX, gBtnY = winX + 10, winY + 48
-    local gBoxBtnX, gBoxBtnY = winX + 10, winY + 74
-    local gSliderX, gSliderY = winX + 10, winY + 112
+    -- Confirmation Modal Layout Bounds (Centered on screen)
+    local viewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+    local cW, cH = 240, 105
+    local cX = (viewportSize.X / 2) - (cW / 2)
+    local cY = (viewportSize.Y / 2) - (cH / 2)
 
-    -- Quality Section
-    local qHeaderY = winY + 134
-    local qBtnX, qBtnY = winX + 10, winY + 152
-    local qBoxBtnX, qBoxBtnY = winX + 10, winY + 178
-    local qSliderX, qSliderY = winX + 10, winY + 216
+    confBorder.Position = Vector2.new(cX - 1, cY - 1)
+    confBorder.Size = Vector2.new(cW + 2, cH + 2)
+    confBg.Position = Vector2.new(cX, cY)
+    confBg.Size = Vector2.new(cW, cH)
+    confTitle.Position = Vector2.new(cX + 14, cY + 10)
+    confMsg.Position = Vector2.new(cX + 14, cY + 34)
+
+    local yesX, yesY, yesW, yesH = cX + 14, cY + 64, 100, 28
+    local noX, noY, noW, noH = cX + 126, cY + 64, 100, 28
+
+    confYesBg.Position = Vector2.new(yesX, yesY)
+    confYesBg.Size = Vector2.new(yesW, yesH)
+    confYesText.Position = Vector2.new(yesX + (yesW / 2), yesY + 6)
+
+    confNoBg.Position = Vector2.new(noX, noY)
+    confNoBg.Size = Vector2.new(noW, noH)
+    confNoText.Position = Vector2.new(noX + (noW / 2), noY + 6)
+
+    if confirmingClose then
+        setMainUIVisible(false)
+        setConfModalVisible(true)
+
+        if mousePressed and not wasMousePressed then
+            local inYes = mouseX >= yesX and mouseX <= yesX + yesW and mouseY >= yesY and mouseY <= yesY + yesH
+            local inNo = mouseX >= noX and mouseX <= noX + noW and mouseY >= noY and mouseY <= noY + noH
+            
+            if inYes then
+                fullShutdown()
+                return
+            elseif inNo then
+                confirmingClose = false
+                setConfModalVisible(false)
+                setMainUIVisible(true)
+                uiVisible = true
+            end
+        end
+        wasMousePressed = mousePressed
+        return
+    else
+        setConfModalVisible(false)
+    end
+
+    if not uiVisible then 
+        setMainUIVisible(false)
+        return 
+    else
+        setMainUIVisible(true)
+    end
+
+    local innerW = winW - 20
+
+    -- Layout Bounds relative to winX, winY (Adjusted spacing for larger text)
+    local gBoxX, gBoxY, gBoxW, gBoxH = winX + 10, winY + 35, winW - 20, 138
+    local gBtnX, gBtnY = winX + 15, winY + 63
+    local gBoxBtnX, gBoxBtnY = winX + 15, winY + 91
+    local gSliderX, gSliderY = winX + 15, winY + 135
+
+    local qBoxX, qBoxY, qBoxW, qBoxH = winX + 10, winY + 180, winW - 20, 138
+    local qBtnX, qBtnY = winX + 15, winY + 208
+    local qBoxBtnX, qBoxBtnY = winX + 15, winY + 236
+    local qSliderX, qSliderY = winX + 15, winY + 280
 
     -- Hitboxes
-    local inTitleBar = mouseX >= winX and mouseX <= winX + winW and mouseY >= winY and mouseY <= winY + 25
-    local inGenBtn = mouseX >= gBtnX and mouseX <= gBtnX + 180 and mouseY >= gBtnY and mouseY <= gBtnY + 22
-    local inGenBoxBtn = mouseX >= gBoxBtnX and mouseX <= gBoxBtnX + 180 and mouseY >= gBoxBtnY and mouseY <= gBoxBtnY + 22
-    local inGenSlider = mouseX >= gSliderX - 5 and mouseX <= gSliderX + 185 and mouseY >= gSliderY - 10 and mouseY <= gSliderY + 18
+    local inCloseBtn = mouseX >= winX + winW - 30 and mouseX <= winX + winW - 8 and mouseY >= winY + 6 and mouseY <= winY + 26
+    local inTitleBar = mouseX >= winX and mouseX <= winX + winW - 35 and mouseY >= winY and mouseY <= winY + 30
+    local inResizeHandle = mouseX >= winX + winW - 16 and mouseX <= winX + winW and mouseY >= winY + winH - 16 and mouseY <= winY + winH
 
-    local inQualBtn = mouseX >= qBtnX and mouseX <= qBtnX + 180 and mouseY >= qBtnY and mouseY <= qBtnY + 22
-    local inQualBoxBtn = mouseX >= qBoxBtnX and mouseX <= qBoxBtnX + 180 and mouseY >= qBoxBtnY and mouseY <= qBoxBtnY + 22
-    local inQualSlider = mouseX >= qSliderX - 5 and mouseX <= qSliderX + 185 and mouseY >= qSliderY - 10 and mouseY <= qSliderY + 18
+    local inGenBtn = mouseX >= gBtnX and mouseX <= gBtnX + innerW and mouseY >= gBtnY and mouseY <= gBtnY + 22
+    local inGenBoxBtn = mouseX >= gBoxBtnX and mouseX <= gBoxBtnX + innerW and mouseY >= gBoxBtnY and mouseY <= gBoxBtnY + 22
+    local inGenSlider = mouseX >= gSliderX - 5 and mouseX <= gSliderX + innerW + 5 and mouseY >= gSliderY - 10 and mouseY <= gSliderY + 20
+
+    local inQualBtn = mouseX >= qBtnX and mouseX <= qBtnX + innerW and mouseY >= qBtnY and mouseY <= qBtnY + 22
+    local inQualBoxBtn = mouseX >= qBoxBtnX and mouseX <= qBoxBtnX + innerW and mouseY >= qBoxBtnY and mouseY <= qBoxBtnY + 22
+    local inQualSlider = mouseX >= qSliderX - 5 and mouseX <= qSliderX + innerW + 5 and mouseY >= qSliderY - 10 and mouseY <= qSliderY + 20
 
     if mousePressed then
         if not wasMousePressed then
-            if inTitleBar then
+            if inCloseBtn then
+                confirmingClose = true
+                return
+            elseif inResizeHandle then
+                isResizingWindow = true
+            elseif inTitleBar then
                 isDraggingWindow = true
                 windowOffset = Vector2.new(mouseX - winX, mouseY - winY)
             elseif inGenSlider then
@@ -254,14 +537,17 @@ _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
             end
         end
 
-        if isDraggingWindow then
+        if isResizingWindow then
+            winW = math.clamp(mouseX - winX, 200, 420)
+            winH = math.clamp(mouseY - winY, 320, 620)
+        elseif isDraggingWindow then
             winX = mouseX - windowOffset.X
             winY = mouseY - windowOffset.Y
         elseif activeSlider == "gen" then
-            local percent = math.clamp((mouseX - gSliderX) / 180, 0, 1)
+            local percent = math.clamp((mouseX - gSliderX) / innerW, 0, 1)
             genMaxDist = math.floor(10 + (percent * 9990))
         elseif activeSlider == "qual" then
-            local percent = math.clamp((mouseX - qSliderX) / 180, 0, 1)
+            local percent = math.clamp((mouseX - qSliderX) / innerW, 0, 1)
             qualMaxDist = math.floor(10 + (percent * 9990))
         end
     else
@@ -272,166 +558,217 @@ _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
                     genEnabled = not genEnabled
                     genBtnText.Color = genEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
                     genBtnText.Text = genEnabled and "ESP: [ON]" or "ESP: [OFF]"
-                    if not genEnabled then genBox.Visible = false; genText.Visible = false end
                 elseif inGenBoxBtn then
                     lastClick = tick()
                     genBoxEnabled = not genBoxEnabled
                     genBoxBtnText.Color = genBoxEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
                     genBoxBtnText.Text = genBoxEnabled and "Box ESP: [ON]" or "Box ESP: [OFF]"
-                    if not genBoxEnabled then genBox.Visible = false end
                 elseif inQualBtn then
                     lastClick = tick()
                     qualEnabled = not qualEnabled
                     qualBtnText.Color = qualEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
                     qualBtnText.Text = qualEnabled and "ESP: [ON]" or "ESP: [OFF]"
-                    if not qualEnabled then qualBox.Visible = false; qualText.Visible = false end
                 elseif inQualBoxBtn then
                     lastClick = tick()
                     qualBoxEnabled = not qualBoxEnabled
                     qualBoxBtnText.Color = qualBoxEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
                     qualBoxBtnText.Text = qualBoxEnabled and "Box ESP: [ON]" or "Box ESP: [OFF]"
-                    if not qualBoxEnabled then qualBox.Visible = false end
                 end
             end
         end
 
         isDraggingWindow = false
+        isResizingWindow = false
         activeSlider = nil
     end
 
     wasMousePressed = mousePressed
 
-    -- Recalculate visual UI component positions
-    gBtnX, gBtnY = winX + 10, winY + 48
-    gBoxBtnX, gBoxBtnY = winX + 10, winY + 74
-    gSliderX, gSliderY = winX + 10, winY + 112
-
-    qHeaderY = winY + 134
-    qBtnX, qBtnY = winX + 10, winY + 152
-    qBoxBtnX, qBoxBtnY = winX + 10, winY + 178
-    qSliderX, qSliderY = winX + 10, winY + 216
-
+    -- Recalculate component dimensions & positions
     mainBorder.Position = Vector2.new(winX - 1, winY - 1)
+    mainBorder.Size = Vector2.new(winW + 2, winH + 2)
     mainBg.Position = Vector2.new(winX, winY)
-    titleText.Position = Vector2.new(winX + 10, winY + 8)
+    mainBg.Size = Vector2.new(winW, winH)
+    accentBar.Position = Vector2.new(winX, winY)
+    accentBar.Size = Vector2.new(winW, 3)
+    titleText.Position = Vector2.new(winX + 12, winY + 8)
+    closeBtnText.Position = Vector2.new(winX + winW - 28, winY + 7)
+    resizeHandle.Position = Vector2.new(winX + winW - 15, winY + winH - 17)
 
     -- Generic Elements Update
-    genHeader.Position = Vector2.new(winX + 10, winY + 30)
+    genBoxBg.Position = Vector2.new(gBoxX, gBoxY)
+    genBoxBg.Size = Vector2.new(gBoxW, gBoxH)
+    genHeader.Position = Vector2.new(gBoxX + 10, gBoxY + 8)
     genBtnBg.Position = Vector2.new(gBtnX, gBtnY)
-    genBtnText.Position = Vector2.new(gBtnX + 90, gBtnY + 4)
+    genBtnBg.Size = Vector2.new(innerW, 22)
+    genBtnText.Position = Vector2.new(gBtnX + (innerW / 2), gBtnY + 4)
+
     genBoxBtnBg.Position = Vector2.new(gBoxBtnX, gBoxBtnY)
-    genBoxBtnText.Position = Vector2.new(gBoxBtnX + 90, gBoxBtnY + 4)
+    genBoxBtnBg.Size = Vector2.new(innerW, 22)
+    genBoxBtnText.Position = Vector2.new(gBoxBtnX + (innerW / 2), gBoxBtnY + 4)
+
     genSliderBg.Position = Vector2.new(gSliderX, gSliderY)
+    genSliderBg.Size = Vector2.new(innerW, 5)
     genSliderFill.Position = Vector2.new(gSliderX, gSliderY)
 
     local gPercent = math.clamp((genMaxDist - 10) / 9990, 0, 1)
-    local gFillW = math.clamp(180 * gPercent, 2, 180)
+    local gFillW = math.clamp(innerW * gPercent, 2, innerW)
     genSliderFill.Size = Vector2.new(gFillW, 5)
     genSliderKnob.Position = Vector2.new(gSliderX + gFillW - 3, gSliderY - 4)
-    genSliderText.Position = Vector2.new(gSliderX, gSliderY - 15)
+    genSliderText.Position = Vector2.new(gSliderX, gSliderY - 17)
     genSliderText.Text = string.format("Max Distance: %d studs", genMaxDist)
+    genStatusText.Position = Vector2.new(gSliderX, gSliderY + 9)
 
     -- Quality Elements Update
-    qualHeader.Position = Vector2.new(winX + 10, qHeaderY)
+    qualBoxBg.Position = Vector2.new(qBoxX, qBoxY)
+    qualBoxBg.Size = Vector2.new(qBoxW, qBoxH)
+    qualHeader.Position = Vector2.new(qBoxX + 10, qBoxY + 8)
     qualBtnBg.Position = Vector2.new(qBtnX, qBtnY)
-    qualBtnText.Position = Vector2.new(qBtnX + 90, qBtnY + 4)
+    qualBtnBg.Size = Vector2.new(innerW, 22)
+    qualBtnText.Position = Vector2.new(qBtnX + (innerW / 2), qBtnY + 4)
+
     qualBoxBtnBg.Position = Vector2.new(qBoxBtnX, qBoxBtnY)
-    qualBoxBtnText.Position = Vector2.new(qBoxBtnX + 90, qBoxBtnY + 4)
+    qualBoxBtnBg.Size = Vector2.new(innerW, 22)
+    qualBoxBtnText.Position = Vector2.new(qBoxBtnX + (innerW / 2), qBoxBtnY + 4)
+
     qualSliderBg.Position = Vector2.new(qSliderX, qSliderY)
+    qualSliderBg.Size = Vector2.new(innerW, 5)
     qualSliderFill.Position = Vector2.new(qSliderX, qSliderY)
 
     local qPercent = math.clamp((qualMaxDist - 10) / 9990, 0, 1)
-    local qFillW = math.clamp(180 * qPercent, 2, 180)
+    local qFillW = math.clamp(innerW * qPercent, 2, innerW)
     qualSliderFill.Size = Vector2.new(qFillW, 5)
     qualSliderKnob.Position = Vector2.new(qSliderX + qFillW - 3, qSliderY - 4)
-    qualSliderText.Position = Vector2.new(qSliderX, qSliderY - 15)
+    qualSliderText.Position = Vector2.new(qSliderX, qSliderY - 17)
     qualSliderText.Text = string.format("Max Distance: %d studs", qualMaxDist)
+    qualStatusText.Position = Vector2.new(qSliderX, qSliderY + 9)
 end)
 
--- Main ESP Render Loop for Both Categories
+-- Main ESP Render Loop supporting multi-printer rendering simultaneously
 _G.PrinterESPConn = RunService.RenderStepped:Connect(function()
-    local cargoFolder = workspace:FindFirstChild("Cargo")
-    if not cargoFolder or not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        genBox.Visible = false; genText.Visible = false
-        qualBox.Visible = false; qualText.Visible = false
+    -- Hide all drawings first
+    for _, obj in ipairs(_G.ActiveESPDrawings) do
+        obj.Visible = false
+    end
+
+    if not uiVisible or confirmingClose then
+        genStatusText.Text = "Status: [Hidden]"
+        qualStatusText.Text = "Status: [Hidden]"
         return
     end
 
-    local rootPos = localPlayer.Character.HumanoidRootPart.Position
+    local cargoFolder = workspace:FindFirstChild("Cargo")
+    local character = localPlayer and localPlayer.Character
+    local hrp = character and character:FindFirstChild("HumanoidRootPart")
 
-    local foundGen = nil
-    local genShortest = genMaxDist + 1
+    if not cargoFolder or not hrp then
+        genStatusText.Text = "Status: [No Cargo/HRP]"
+        qualStatusText.Text = "Status: [No Cargo/HRP]"
+        return
+    end
 
-    local foundQual = nil
-    local qualShortest = qualMaxDist + 1
+    local rootPos = hrp.Position
+    local genFoundCount = 0
+    local qualFoundCount = 0
+    local genDrawingIndex = 1
+    local qualDrawingIndex = 1
+
+    -- Pre-create drawing pools if needed (up to 20 pairs each)
+    while #_G.ActiveESPDrawings < 80 do
+        createESPPair(Color3.fromRGB(0, 170, 255))
+        createESPPair(Color3.fromRGB(255, 60, 60))
+    end
 
     for _, model in ipairs(cargoFolder:GetChildren()) do
         if model:IsA("Model") then
             local nameLower = model.Name:lower()
             local targetPart = model:FindFirstChild("Center") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
 
-            if targetPart then
-                local dist = math.floor((rootPos - targetPart.Position).Magnitude)
+            if targetPart and targetPart.Position then
+                local success, dist = pcall(function()
+                    return math.floor((rootPos - targetPart.Position).Magnitude)
+                end)
 
-                -- Differentiate Quality vs Generic Printers
-                if string.find(nameLower, "quality") or model.Name == "Quality Money Printer" then
-                    if dist < qualShortest then
-                        qualShortest = dist
-                        foundQual = {model = model, part = targetPart, dist = dist}
-                    end
-                elseif string.find(nameLower, "printer") or string.find(nameLower, "money") then
-                    if dist < genShortest then
-                        genShortest = dist
-                        foundGen = {model = model, part = targetPart, dist = dist}
+                if success and dist then
+                    local isQuality = string.find(nameLower, "quality") or model.Name == "Quality Printer" or model.Name == "Quality Money Printer"
+                    
+                    if isQuality and qualEnabled and dist <= qualMaxDist then
+                        qualFoundCount = qualFoundCount + 1
+                        local pos, onScreen = WorldToScreen(targetPart.Position)
+                        if onScreen then
+                            local boxIdx = 40 + ((qualDrawingIndex - 1) * 2) + 1
+                            local txtIdx = boxIdx + 1
+                            if _G.ActiveESPDrawings[boxIdx] and _G.ActiveESPDrawings[txtIdx] then
+                                local box = _G.ActiveESPDrawings[boxIdx]
+                                local txt = _G.ActiveESPDrawings[txtIdx]
+
+                                if qualBoxEnabled then
+                                    box.Visible = true
+                                    box.Color = Color3.fromRGB(255, 60, 60)
+                                    box.Position = Vector2.new(pos.X - 25, pos.Y - 25)
+                                    box.Size = Vector2.new(50, 50)
+                                else
+                                    box.Visible = false
+                                end
+
+                                txt.Visible = true
+                                txt.Color = Color3.fromRGB(255, 60, 60)
+                                txt.Text = model.Name .. " [" .. dist .. "s]"
+                                txt.Position = Vector2.new(pos.X, pos.Y - 45)
+                                qualDrawingIndex = qualDrawingIndex + 1
+                            end
+                        end
+                    elseif not isQuality and (string.find(nameLower, "printer") or string.find(nameLower, "money")) and genEnabled and dist <= genMaxDist then
+                        genFoundCount = genFoundCount + 1
+                        local pos, onScreen = WorldToScreen(targetPart.Position)
+                        if onScreen then
+                            local boxIdx = ((genDrawingIndex - 1) * 2) + 1
+                            local txtIdx = boxIdx + 1
+                            if _G.ActiveESPDrawings[boxIdx] and _G.ActiveESPDrawings[txtIdx] then
+                                local box = _G.ActiveESPDrawings[boxIdx]
+                                local txt = _G.ActiveESPDrawings[txtIdx]
+
+                                if genBoxEnabled then
+                                    box.Visible = true
+                                    box.Color = Color3.fromRGB(0, 170, 255)
+                                    box.Position = Vector2.new(pos.X - 25, pos.Y - 25)
+                                    box.Size = Vector2.new(50, 50)
+                                else
+                                    box.Visible = false
+                                end
+
+                                txt.Visible = true
+                                txt.Color = Color3.fromRGB(0, 170, 255)
+                                txt.Text = model.Name .. " [" .. dist .. "s]"
+                                txt.Position = Vector2.new(pos.X, pos.Y - 45)
+                                genDrawingIndex = genDrawingIndex + 1
+                            end
+                        end
                     end
                 end
             end
         end
     end
 
-    -- Render Generic ESP
-    if genEnabled and foundGen and foundGen.dist <= genMaxDist then
-        local pos, onScreen = WorldToScreen(foundGen.part.Position)
-        if onScreen then
-            if genBoxEnabled then
-                genBox.Visible = true
-                genBox.Position = Vector2.new(pos.X - 25, pos.Y - 25)
-                genBox.Size = Vector2.new(50, 50)
-            else
-                genBox.Visible = false
-            end
-            genText.Visible = true
-            genText.Text = foundGen.model.Name .. " [" .. foundGen.dist .. "s]"
-            genText.Position = Vector2.new(pos.X, pos.Y - 45)
-        else
-            genBox.Visible = false
-            genText.Visible = false
-        end
+    -- Update status text labels on UI
+    if not genEnabled then
+        genStatusText.Text = "Status: [Disabled]"
+        genStatusText.Color = Color3.fromRGB(200, 100, 100)
+    elseif genFoundCount > 0 then
+        genStatusText.Text = string.format("Status: Found %d printer(s)", genFoundCount)
+        genStatusText.Color = Color3.fromRGB(0, 255, 100)
     else
-        genBox.Visible = false
-        genText.Visible = false
+        genStatusText.Text = "Status: [No Printers]"
+        genStatusText.Color = Color3.fromRGB(150, 150, 160)
     end
-
-    -- Render Quality ESP
-    if qualEnabled and foundQual and foundQual.dist <= qualMaxDist then
-        local pos, onScreen = WorldToScreen(foundQual.part.Position)
-        if onScreen then
-            if qualBoxEnabled then
-                qualBox.Visible = true
-                qualBox.Position = Vector2.new(pos.X - 25, pos.Y - 25)
-                qualBox.Size = Vector2.new(50, 50)
-            else
-                qualBox.Visible = false
-            end
-            qualText.Visible = true
-            qualText.Text = foundQual.model.Name .. " [" .. foundQual.dist .. "s]"
-            qualText.Position = Vector2.new(pos.X, pos.Y - 45)
-        else
-            qualBox.Visible = false
-            qualText.Visible = false
-        end
+    if not qualEnabled then
+        qualStatusText.Text = "Status: [Disabled]"
+        qualStatusText.Color = Color3.fromRGB(200, 100, 100)
+    elseif qualFoundCount > 0 then
+        qualStatusText.Text = string.format("Status: Found %d printer(s)", qualFoundCount)
+        qualStatusText.Color = Color3.fromRGB(0, 255, 100)
     else
-        qualBox.Visible = false
-        qualText.Visible = false
+        qualStatusText.Text = "Status: [No Printers]"
+        qualStatusText.Color = Color3.fromRGB(150, 150, 160)
     end
 end)
