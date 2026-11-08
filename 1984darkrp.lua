@@ -58,11 +58,11 @@ local confirmingClose = false
 
 local genEnabled = true
 local genBoxEnabled = true
-local genMaxDist = 500
+local genMaxDist = 1000
 
 local qualEnabled = true
 local qualBoxEnabled = true
-local qualMaxDist = 500
+local qualMaxDist = 1000
 
 -- Multi-ESP Pool Storage
 _G.ActiveESPDrawings = {}
@@ -158,7 +158,7 @@ _G.ConfBorder = confBorder
 
 local confText = Drawing.new("Text")
 confText.Visible = false
-confText.Size = 13
+confText.Size = 14
 confText.Center = true
 confText.Outline = true
 confText.Color = Color3.fromRGB(240, 240, 250)
@@ -173,7 +173,7 @@ _G.ConfYesBg = confYesBg
 
 local confYesTxt = Drawing.new("Text")
 confYesTxt.Visible = false
-confYesTxt.Size = 13
+confYesTxt.Size = 14
 confYesTxt.Center = true
 confYesTxt.Outline = true
 confYesTxt.Color = Color3.fromRGB(255, 255, 255)
@@ -188,7 +188,7 @@ _G.ConfNoBg = confNoBg
 
 local confNoTxt = Drawing.new("Text")
 confNoTxt.Visible = false
-confNoTxt.Size = 13
+confNoTxt.Size = 14
 confNoTxt.Center = true
 confNoTxt.Outline = true
 confNoTxt.Color = Color3.fromRGB(255, 255, 255)
@@ -272,7 +272,7 @@ sliderText2.Visible = true
 sliderText2.Size = 13
 sliderText2.Color = Color3.fromRGB(200, 200, 210)
 sliderText2.Outline = true
-sliderText2.Text = "Max Distance: 500 studs"
+sliderText2.Text = "Max Distance: 1000 studs"
 _G.SliderText2 = sliderText2
 
 local qualStatusText = Drawing.new("Text")
@@ -313,7 +313,7 @@ sliderText.Visible = true
 sliderText.Size = 13
 sliderText.Color = Color3.fromRGB(200, 200, 210)
 sliderText.Outline = true
-sliderText.Text = "Max Distance: 500 studs"
+sliderText.Text = "Max Distance: 1000 studs"
 _G.SliderText = sliderText
 
 local genStatusText = Drawing.new("Text")
@@ -377,7 +377,7 @@ local function setMainUIVisible(visible)
     end
 end
 
--- Fully Cached Printer Management with strict filtering (ignores ComponentCrates)
+-- Fully Cached Printer Management with safe folder checking
 local cachedPrinters = {}
 
 local function updatePrinterCache()
@@ -407,7 +407,7 @@ local function updatePrinterCache()
     end
 end
 
--- Safely hook up folder events
+-- Safely hook up folder events with robust nil checking
 task.spawn(function()
     local cargoFolder = workspace:FindFirstChild("Cargo")
     while not cargoFolder do
@@ -416,8 +416,10 @@ task.spawn(function()
     end
     
     if cargoFolder then
-        _G.CargoChildAddedConn = cargoFolder.ChildAdded:Connect(updatePrinterCache)
-        _G.CargoChildRemovedConn = cargoFolder.ChildRemoved:Connect(updatePrinterCache)
+        pcall(function()
+            _G.CargoChildAddedConn = cargoFolder.ChildAdded:Connect(updatePrinterCache)
+            _G.CargoChildRemovedConn = cargoFolder.ChildRemoved:Connect(updatePrinterCache)
+        end)
         updatePrinterCache()
     end
 end)
@@ -578,7 +580,7 @@ _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
     sliderBg2.Position = Vector2.new(sX2, sY2)
     sliderBg2.Size = Vector2.new(sW2, 6)
     
-    local sPercent2 = math.clamp((qualMaxDist - 50) / 1450, 0, 1)
+    local sPercent2 = math.clamp((qualMaxDist - 50) / 9950, 0, 1)
     local sFillW2 = math.clamp(sW2 * sPercent2, 2, sW2)
     sliderFill2.Position = Vector2.new(sX2, sY2)
     sliderFill2.Size = Vector2.new(sFillW2, 6)
@@ -606,7 +608,7 @@ _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
     sliderBg.Position = Vector2.new(sX, sY)
     sliderBg.Size = Vector2.new(sW, 6)
     
-    local sPercent = math.clamp((genMaxDist - 50) / 1450, 0, 1)
+    local sPercent = math.clamp((genMaxDist - 50) / 9950, 0, 1)
     local sFillW = math.clamp(sW * sPercent, 2, sW)
     sliderFill.Position = Vector2.new(sX, sY)
     sliderFill.Size = Vector2.new(sFillW, 6)
@@ -614,9 +616,9 @@ _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
 
     genStatusText.Position = Vector2.new(p2X + 12, p2Y + 140)
 
-    -- Confirmation Popup Geometry centered on screen viewport
+    -- Confirmation Popup Geometry centered on screen viewport (Bigger Size & Centered Buttons)
     local viewportSize = Camera.ViewportSize
-    local cW, cH = 320, 130
+    local cW, cH = 360, 140
     local cX = math.floor((viewportSize.X - cW) / 2)
     local cY = math.floor((viewportSize.Y - cH) / 2)
 
@@ -624,20 +626,23 @@ _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
     confBg.Size = Vector2.new(cW, cH)
     confBorder.Position = Vector2.new(cX - 1, cY - 1)
     confBorder.Size = Vector2.new(cW + 2, cH + 2)
-    confText.Position = Vector2.new(cX + math.floor(cW / 2), cY + 22)
+    confText.Position = Vector2.new(cX + math.floor(cW / 2), cY + 24)
 
-    local btnW, btnH = 110, 32
-    local btnY = cY + 72
-    local yesX = cX + 28
-    local noX = cX + cW - btnW - 28
+    local btnW, btnH = 130, 38
+    local btnY = cY + 74
+    local totalButtonsWidth = (btnW * 2) + 20
+    local startBtnX = cX + math.floor((cW - totalButtonsWidth) / 2)
+
+    local yesX = startBtnX
+    local noX = startBtnX + btnW + 20
 
     confYesBg.Position = Vector2.new(yesX, btnY)
     confYesBg.Size = Vector2.new(btnW, btnH)
-    confYesTxt.Position = Vector2.new(yesX + math.floor(btnW / 2), btnY + 8)
+    confYesTxt.Position = Vector2.new(yesX + math.floor(btnW / 2), btnY + 10)
 
     confNoBg.Position = Vector2.new(noX, btnY)
     confNoBg.Size = Vector2.new(btnW, btnH)
-    confNoTxt.Position = Vector2.new(noX + math.floor(btnW / 2), btnY + 8)
+    confNoTxt.Position = Vector2.new(noX + math.floor(btnW / 2), btnY + 10)
 
     confBg.Visible = confirmingClose
     confBorder.Visible = confirmingClose
@@ -695,10 +700,10 @@ _G.PrinterClickConn = RunService.RenderStepped:Connect(function()
                 winH = math.clamp(resizeStartSize.Y + (mouseY - resizeStartPos.Y), 400, 550)
             elseif activeSlider then
                 local percent = math.clamp((mouseX - sX) / sW, 0, 1)
-                genMaxDist = math.floor(50 + (percent * 1450))
+                genMaxDist = math.floor(50 + (percent * 9950))
             elseif activeSlider2 then
                 local percent = math.clamp((mouseX - sX2) / sW2, 0, 1)
-                qualMaxDist = math.floor(50 + (percent * 1450))
+                qualMaxDist = math.floor(50 + (percent * 9950))
             end
         end
     else
